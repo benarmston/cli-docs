@@ -8,8 +8,6 @@ import (
 	"os"
 	"regexp"
 	"runtime"
-	"sort"
-	"strconv"
 	"strings"
 	"text/template"
 	"unicode/utf8"
@@ -257,11 +255,15 @@ func prepareFlags(
 			} else {
 				modifiedArg += fmt.Sprintf("-%s", trimmed)
 			}
+			if flag.TakesValue() {
+				placeholder, _ := unquoteUsage(flag.GetUsage())
+				if placeholder == "" {
+					placeholder = "value"
+				}
+				modifiedArg += fmt.Sprintf("=%s", placeholder)
+			}
 		}
 		modifiedArg += closer
-		if flag.TakesValue() {
-			modifiedArg += fmt.Sprintf("=%s", value)
-		}
 
 		if addDetails {
 			modifiedArg += flagDetails(flag)
@@ -270,8 +272,24 @@ func prepareFlags(
 		args = append(args, modifiedArg+"\n")
 
 	}
-	sort.Strings(args)
 	return args
+}
+
+// Returns the placeholder, if any, and the unquoted usage string.
+func unquoteUsage(usage string) (string, string) {
+	for i := range len(usage) {
+		if usage[i] == '`' {
+			for j := i + 1; j < len(usage); j++ {
+				if usage[j] == '`' {
+					name := usage[i+1 : j]
+					usage = usage[:i] + name + usage[j+1:]
+					return name, usage
+				}
+			}
+			break
+		}
+	}
+	return "", usage
 }
 
 // flagDetails returns a string containing the flags metadata
@@ -571,8 +589,8 @@ func getFlagDefaultValue(f cli.DocGenerationFlag) (value, text string) {
 	}
 
 	if !f.TakesValue() {
-		if boolFlag, isBool := f.(*cli.BoolFlag); isBool {
-			return strconv.FormatBool(boolFlag.Value), ""
+		if _, isBool := f.(*cli.BoolFlag); isBool {
+			return "", ""
 		}
 		return "", ""
 	}
